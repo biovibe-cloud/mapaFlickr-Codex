@@ -61,6 +61,11 @@
             <span id="locationName">Granada, Espana</span>
             <small id="photoCount">Fotos ordenadas por fecha</small>
           </div>
+          <div class="ribbon-sort" aria-label="Orden de la cinta">
+            <button class="sort-button is-active" type="button" data-ribbon-sort="nearby">Cercanas</button>
+            <button class="sort-button" type="button" data-ribbon-sort="date">Fecha</button>
+            <button class="sort-button" type="button" data-ribbon-sort="name">Nombre</button>
+          </div>
           <div class="ribbon-strip" id="ribbonStrip"></div>
         </footer>
       </section>
@@ -84,6 +89,6 @@
     </dialog>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="script.js?v=4"></script>
+    <script src="script.js?v=5"></script>
   </body>
 </html>

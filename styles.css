@@ -288,7 +288,7 @@ h1 {
 
 .photo-ribbon {
   display: grid;
-  grid-template-columns: minmax(170px, 260px) 1fr;
+  grid-template-columns: minmax(170px, 230px) auto 1fr;
   gap: 16px;
   align-items: center;
   padding: 16px 18px;
@@ -310,6 +310,31 @@ h1 {
 .lightbox-copy span {
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+.ribbon-sort {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 86%, var(--map));
+}
+
+.sort-button {
+  height: 30px;
+  padding: 0 9px;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.sort-button:hover,
+.sort-button.is-active {
+  color: var(--panel);
+  background: var(--ink);
 }
 
 .ribbon-strip {
@@ -462,6 +487,11 @@ h1 {
   .photo-ribbon {
     grid-template-columns: 1fr;
     display: grid;
+  }
+
+  .ribbon-sort {
+    width: max-content;
+    max-width: 100%;
   }
 
   .source-controls,

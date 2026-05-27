@@ -37,6 +37,7 @@ const lightboxTitle = document.querySelector("#lightboxTitle");
 const lightboxDate = document.querySelector("#lightboxDate");
 const prevPhotoButton = document.querySelector("#prevPhoto");
 const nextPhotoButton = document.querySelector("#nextPhoto");
+const ribbonSortButtons = document.querySelectorAll("[data-ribbon-sort]");
 const flickrForm = document.querySelector("#flickrForm");
 const albumInput = document.querySelector("#albumInput");
 const apiKeyInput = document.querySelector("#apiKeyInput");
@@ -45,6 +46,7 @@ const sourceStatus = document.querySelector("#sourceStatus");
 let selectedLocation = locations[0];
 let selectedMarker = null;
 let activePhotoIndex = 0;
+let ribbonSortMode = localStorage.getItem("mapaFlickr.ribbonSortMode") || "nearby";
 const mapMarkers = new Map();
 const urlParams = new URLSearchParams(window.location.search);
 const storageKeys = {
@@ -88,11 +90,11 @@ function allSortedPhotos(location) {
   return [...location.photos].sort((a, b) => dateValue(a.date) - dateValue(b.date));
 }
 
-function nearbyPhotos() {
+function ribbonPhotos() {
   const activePhoto = allSortedPhotos(selectedLocation)[activePhotoIndex];
   if (!activePhoto) return [];
 
-  return locations
+  const photos = locations
     .flatMap((location) =>
       allSortedPhotos(location).map((item, photoIndex) => ({
         item,
@@ -100,8 +102,17 @@ function nearbyPhotos() {
         photoIndex,
         distance: geoDistanceKm(activePhoto, item)
       }))
-    )
-    .sort((a, b) => {
+    );
+
+  if (ribbonSortMode === "date") {
+    return photos.sort((a, b) => dateValue(a.item.date) - dateValue(b.item.date));
+  }
+
+  if (ribbonSortMode === "name") {
+    return photos.sort((a, b) => a.item.title.localeCompare(b.item.title, "es", { numeric: true }));
+  }
+
+  return photos.sort((a, b) => {
       if (a.distance !== b.distance) return a.distance - b.distance;
       return a.item.title.localeCompare(b.item.title, "es", { numeric: true });
     });
@@ -141,11 +152,11 @@ function renderMarkers() {
 }
 
 function renderRibbon() {
-  const photos = nearbyPhotos().slice(0, 6);
+  const photos = ribbonPhotos().slice(0, 6);
 
   const selectedPhoto = allSortedPhotos(selectedLocation)[activePhotoIndex];
   locationName.textContent = selectedPhoto?.title || selectedLocation.name;
-  photoCount.textContent = `${photos.length} imagen${photos.length === 1 ? "" : "es"} mas cercanas a la seleccion`;
+  photoCount.textContent = ribbonStatusText(photos.length);
   ribbonStrip.innerHTML = "";
 
   photos.forEach(({ item, location, photoIndex }) => {
@@ -162,6 +173,8 @@ function renderRibbon() {
     });
     ribbonStrip.appendChild(tile);
   });
+
+  updateRibbonSortButtons();
 }
 
 function selectLocation(location, photoIndex = 0) {
@@ -302,6 +315,14 @@ document.querySelectorAll("[data-zoom]").forEach((button) => {
   });
 });
 
+ribbonSortButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    ribbonSortMode = button.dataset.ribbonSort;
+    localStorage.setItem("mapaFlickr.ribbonSortMode", ribbonSortMode);
+    renderRibbon();
+  });
+});
+
 flickrForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   await loadFlickrAlbum();
@@ -342,6 +363,20 @@ function locationCenter(location) {
     lat: center.lat / location.photos.length,
     lng: center.lng / location.photos.length
   };
+}
+
+function ribbonStatusText(photoTotal) {
+  const label = `${photoTotal} imagen${photoTotal === 1 ? "" : "es"}`;
+
+  if (ribbonSortMode === "date") return `${label} ordenadas por fecha`;
+  if (ribbonSortMode === "name") return `${label} ordenadas por nombre`;
+  return `${label} mas cercanas a la seleccion`;
+}
+
+function updateRibbonSortButtons() {
+  ribbonSortButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.ribbonSort === ribbonSortMode);
+  });
 }
 
 async function loadFlickrAlbum({ silent = false } = {}) {
