@@ -1,0 +1,14 @@
+{
+  "name": "mapaflickr",
+  "version": "1.0.0",
+  "description": "Mapa mundi minimalista para explorar fotos geolocalizadas desde un album de Flickr.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "private": true
+}

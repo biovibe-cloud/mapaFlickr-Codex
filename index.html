@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="mapaFlickr es un mapa mundi minimalista para explorar fotos geolocalizadas desde un album de Flickr."
+    />
+    <title>mapaFlickr</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell" id="app">
+      <section class="travel-map" aria-label="travelMap, mapa de viajes con fotos">
+        <header class="topbar">
+          <div>
+            <p class="brand">mapaFlickr</p>
+            <h1>Mapa fotografico desde Flickr</h1>
+          </div>
+          <form class="source-controls" id="flickrForm">
+            <input
+              class="source-input"
+              id="albumInput"
+              type="text"
+              autocomplete="off"
+              placeholder="ID del album"
+              aria-label="ID del album de Flickr"
+            />
+            <input
+              class="source-input"
+              id="apiKeyInput"
+              type="password"
+              autocomplete="off"
+              placeholder="API key"
+              aria-label="API key de Flickr"
+            />
+            <button class="source-button" type="submit" id="loadFlickrButton">Cargar album</button>
+            <p class="topbar-note" id="sourceStatus">Fotos de ejemplo</p>
+          </form>
+        </header>
+
+        <section class="map-stage">
+          <div class="map-toolbar" aria-label="Controles de zoom">
+            <button type="button" data-zoom="out" aria-label="Zoom out">-</button>
+            <button type="button" data-zoom="reset" aria-label="Mapa del mundo completo">Mundo</button>
+            <button type="button" data-zoom="in" aria-label="Zoom in">+</button>
+          </div>
+
+          <div class="viewport" id="viewport">
+            <div class="map-canvas" id="mapCanvas" aria-label="Mapa mundi interactivo"></div>
+          </div>
+        </section>
+
+        <footer class="photo-ribbon" aria-label="Fotos de la ubicacion seleccionada">
+          <div class="ribbon-meta">
+            <span id="locationName">Granada, Espana</span>
+            <small id="photoCount">Fotos ordenadas por fecha</small>
+          </div>
+          <div class="ribbon-strip" id="ribbonStrip"></div>
+        </footer>
+      </section>
+    </main>
+
+    <dialog class="lightbox" id="lightbox">
+      <button class="close-button" type="button" id="closeLightbox" aria-label="Cerrar">x</button>
+      <div class="lightbox-frame">
+        <button class="gallery-button gallery-button-prev" type="button" id="prevPhoto" aria-label="Foto anterior">
+          &lsaquo;
+        </button>
+        <img id="lightboxImage" alt="" />
+        <button class="gallery-button gallery-button-next" type="button" id="nextPhoto" aria-label="Foto siguiente">
+          &rsaquo;
+        </button>
+      </div>
+      <div class="lightbox-copy">
+        <strong id="lightboxTitle"></strong>
+        <span id="lightboxDate"></span>
+      </div>
+    </dialog>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
