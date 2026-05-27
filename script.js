@@ -88,23 +88,23 @@ function allSortedPhotos(location) {
   return [...location.photos].sort((a, b) => dateValue(a.date) - dateValue(b.date));
 }
 
-function allPhotosByName() {
+function nearbyPhotos() {
+  const activePhoto = allSortedPhotos(selectedLocation)[activePhotoIndex];
+  if (!activePhoto) return [];
+
   return locations
     .flatMap((location) =>
       allSortedPhotos(location).map((item, photoIndex) => ({
         item,
         location,
-        photoIndex
+        photoIndex,
+        distance: geoDistanceKm(activePhoto, item)
       }))
     )
-    .sort((a, b) => a.item.title.localeCompare(b.item.title, "es", { numeric: true }));
-}
-
-function activeGlobalPhotoIndex(items) {
-  const index = items.findIndex(
-    (entry) => entry.location.id === selectedLocation.id && entry.photoIndex === activePhotoIndex
-  );
-  return Math.max(index, 0);
+    .sort((a, b) => {
+      if (a.distance !== b.distance) return a.distance - b.distance;
+      return a.item.title.localeCompare(b.item.title, "es", { numeric: true });
+    });
 }
 
 function renderMarkers() {
@@ -141,13 +141,11 @@ function renderMarkers() {
 }
 
 function renderRibbon() {
-  const globalPhotos = allPhotosByName();
-  const startIndex = activeGlobalPhotoIndex(globalPhotos);
-  const photos = globalPhotos.slice(startIndex, startIndex + 6);
+  const photos = nearbyPhotos().slice(0, 6);
 
   const selectedPhoto = allSortedPhotos(selectedLocation)[activePhotoIndex];
   locationName.textContent = selectedPhoto?.title || selectedLocation.name;
-  photoCount.textContent = `${photos.length} imagen${photos.length === 1 ? "" : "es"} desde la seleccion, ordenadas por nombre`;
+  photoCount.textContent = `${photos.length} imagen${photos.length === 1 ? "" : "es"} mas cercanas a la seleccion`;
   ribbonStrip.innerHTML = "";
 
   photos.forEach(({ item, location, photoIndex }) => {
@@ -230,6 +228,23 @@ function markerIcon(isSelected = false) {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function geoDistanceKm(a, b) {
+  const earthRadiusKm = 6371;
+  const latDelta = degreesToRadians(b.lat - a.lat);
+  const lngDelta = degreesToRadians(b.lng - a.lng);
+  const startLat = degreesToRadians(a.lat);
+  const endLat = degreesToRadians(b.lat);
+  const haversine =
+    Math.sin(latDelta / 2) ** 2 +
+    Math.cos(startLat) * Math.cos(endLat) * Math.sin(lngDelta / 2) ** 2;
+
+  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+function degreesToRadians(value) {
+  return (value * Math.PI) / 180;
 }
 
 function updateGalleryButtons(photoTotal) {
