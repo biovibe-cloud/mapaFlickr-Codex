@@ -427,7 +427,7 @@ function normalizeFlickrPayload(payload, albumId) {
     .map((item) => {
       const lat = Number(item.latitude);
       const lng = Number(item.longitude);
-      const src = item.url_l || item.url_m || item.url_s || item.url_t || item.url_sq || item.url_o;
+      const src = flickrImageUrl(item);
 
       if (!item.latitude || !item.longitude || !Number.isFinite(lat) || !Number.isFinite(lng) || !src) {
         return null;
@@ -451,6 +451,15 @@ function normalizeFlickrPayload(payload, albumId) {
     located: photos.length,
     photos
   };
+}
+
+function flickrImageUrl(item) {
+  const directUrl = item.url_l || item.url_m || item.url_s || item.url_t || item.url_sq || item.url_o;
+
+  if (directUrl) return directUrl.replace(/^http:/, "https:");
+  if (!item.server || !item.id || !item.secret) return "";
+
+  return `https://live.staticflickr.com/${item.server}/${item.id}_${item.secret}_z.jpg`;
 }
 
 function setSourceStatus(message) {
