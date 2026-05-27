@@ -100,20 +100,24 @@ function ribbonPhotos() {
         item,
         location,
         photoIndex,
-        distance: geoDistanceKm(activePhoto, item)
+        geoDistance: geoDistanceKm(activePhoto, item),
+        dateDistance: Math.abs(dateValue(activePhoto.date) - dateValue(item.date))
       }))
     );
 
   if (ribbonSortMode === "date") {
-    return photos.sort((a, b) => dateValue(a.item.date) - dateValue(b.item.date));
+    return photos.sort((a, b) => {
+      if (a.dateDistance !== b.dateDistance) return a.dateDistance - b.dateDistance;
+      return a.item.title.localeCompare(b.item.title, "es", { numeric: true });
+    });
   }
 
   if (ribbonSortMode === "name") {
-    return photos.sort((a, b) => a.item.title.localeCompare(b.item.title, "es", { numeric: true }));
+    return photosByNameNearActive(photos, activePhoto);
   }
 
   return photos.sort((a, b) => {
-      if (a.distance !== b.distance) return a.distance - b.distance;
+      if (a.geoDistance !== b.geoDistance) return a.geoDistance - b.geoDistance;
       return a.item.title.localeCompare(b.item.title, "es", { numeric: true });
     });
 }
@@ -260,6 +264,21 @@ function degreesToRadians(value) {
   return (value * Math.PI) / 180;
 }
 
+function photosByNameNearActive(photos, activePhoto) {
+  const sortedByName = [...photos].sort((a, b) => a.item.title.localeCompare(b.item.title, "es", { numeric: true }));
+  const activeIndex = sortedByName.findIndex((entry) => entry.item === activePhoto);
+
+  return sortedByName
+    .map((entry, index) => ({
+      ...entry,
+      nameDistance: activeIndex === -1 ? index : Math.abs(index - activeIndex)
+    }))
+    .sort((a, b) => {
+      if (a.nameDistance !== b.nameDistance) return a.nameDistance - b.nameDistance;
+      return a.item.title.localeCompare(b.item.title, "es", { numeric: true });
+    });
+}
+
 function updateGalleryButtons(photoTotal) {
   prevPhotoButton.disabled = photoTotal <= 1;
   nextPhotoButton.disabled = photoTotal <= 1;
@@ -368,8 +387,8 @@ function locationCenter(location) {
 function ribbonStatusText(photoTotal) {
   const label = `${photoTotal} imagen${photoTotal === 1 ? "" : "es"}`;
 
-  if (ribbonSortMode === "date") return `${label} ordenadas por fecha`;
-  if (ribbonSortMode === "name") return `${label} ordenadas por nombre`;
+  if (ribbonSortMode === "date") return `${label} con fechas cercanas a la seleccion`;
+  if (ribbonSortMode === "name") return `${label} con nombres cercanos a la seleccion`;
   return `${label} mas cercanas a la seleccion`;
 }
 
