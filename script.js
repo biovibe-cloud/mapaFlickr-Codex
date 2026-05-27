@@ -331,22 +331,26 @@ function locationCenter(location) {
 
 async function loadFlickrAlbum({ silent = false } = {}) {
   const params = new URLSearchParams();
-  const albumId = albumInput.value.trim();
+  const rawAlbumId = albumInput.value.trim();
+  const albumId = normalizeAlbumId(rawAlbumId);
   const apiKey = apiKeyInput.value.trim();
+  const hasCredentials = Boolean(albumId || apiKey);
+  const quiet = silent && !hasCredentials;
 
   if (!albumId && !apiKey) return;
 
   if (!albumId || !apiKey) {
-    if (!silent) setSourceStatus("Falta el ID del album o la API key");
+    if (!quiet) setSourceStatus("Falta el ID del album o la API key");
     return;
   }
 
+  if (albumId !== rawAlbumId) albumInput.value = albumId;
   if (albumId) params.set("albumId", albumId);
   if (apiKey) params.set("apiKey", apiKey);
   params.set("cacheBust", String(Date.now()));
   saveFlickrSettings(albumId, apiKey);
 
-  if (!silent) setSourceStatus("Leyendo Flickr...");
+  if (!quiet) setSourceStatus("Leyendo Flickr...");
 
   try {
     const payload = await fetchFlickrAlbum(params, apiKey, albumId);
@@ -358,8 +362,8 @@ async function loadFlickrAlbum({ silent = false } = {}) {
 
     replaceLocations(groupPhotosByPlace(payload.photos));
     setSourceStatus(`${payload.located}/${payload.total} fotos ubicadas de ${payload.title}`);
-  } catch {
-    if (!silent) setSourceStatus("No se pudo conectar con Flickr");
+  } catch (error) {
+    if (!quiet) setSourceStatus(error.message || "No se pudo conectar con Flickr");
   }
 }
 
@@ -370,6 +374,7 @@ async function fetchFlickrAlbum(params, apiKey, albumId) {
       const payload = await response.json();
 
       if (response.ok) return payload;
+      throw new Error(payload.error || "No se pudo leer Flickr");
     } catch {
       // If the local server is not running, try Flickr directly below.
     }
@@ -469,6 +474,11 @@ function setSourceStatus(message) {
 function saveFlickrSettings(albumId, apiKey) {
   localStorage.setItem(storageKeys.albumId, albumId);
   localStorage.setItem(storageKeys.apiKey, apiKey);
+}
+
+function normalizeAlbumId(value) {
+  const match = value.match(/\d{8,}/);
+  return match ? match[0] : value;
 }
 
 function groupPhotosByPlace(items) {
