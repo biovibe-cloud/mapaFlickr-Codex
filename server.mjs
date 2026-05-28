@@ -6,7 +6,6 @@ const root = process.cwd();
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "0.0.0.0";
 const flickrApiKey = process.env.FLICKR_API_KEY || "";
-const flickrAlbumId = process.env.FLICKR_ALBUM_ID || "";
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -45,7 +44,10 @@ createServer(async (request, response) => {
 
     const body = await readFile(filePath);
     const contentType = contentTypes[extname(filePath).toLowerCase()] || "application/octet-stream";
-    response.writeHead(200, { "Content-Type": contentType });
+    response.writeHead(200, {
+      "Content-Type": contentType,
+      "Cache-Control": "no-store, max-age=0"
+    });
     response.end(body);
   } catch {
     response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
@@ -58,19 +60,19 @@ createServer(async (request, response) => {
 async function handleFlickrAlbum(url, response) {
   try {
     const apiKey = url.searchParams.get("apiKey") || flickrApiKey;
-    const albumId = url.searchParams.get("albumId") || flickrAlbumId;
+    const albumId = url.searchParams.get("albumId") || "";
     const requestedLimit = Number(url.searchParams.get("limit") || 500);
     const limit = Math.min(Math.max(requestedLimit, 1), 500);
 
     if (!apiKey || !albumId) {
       sendJson(response, 400, {
-        error: "Falta FLICKR_API_KEY, FLICKR_ALBUM_ID o los parametros apiKey y albumId."
+        error: "Falta apiKey o albumId. El album debe enviarse explicitamente en cada carga."
       });
       return;
     }
 
     const payload = await fetchAllFlickrPhotos({ apiKey, albumId, limit });
-    const photos = normalizeFlickrPhotos(payload.photos);
+    const photos = await normalizeFlickrPhotos(payload.photos, apiKey);
 
     sendJson(response, 200, {
       albumId,
@@ -137,9 +139,11 @@ async function fetchFlickrPhotoPage({ apiKey, albumId, limit, page }) {
   return payload;
 }
 
-function normalizeFlickrPhotos(items) {
-  return items
-    .map((item) => {
+async function normalizeFlickrPhotos(items, apiKey) {
+  const photosWithLocations = await fillMissingFlickrLocations(items, apiKey);
+
+  return photosWithLocations
+    .map((item, index) => {
       const lat = Number(item.latitude);
       const lng = Number(item.longitude);
       const src = flickrImageUrl(item);
@@ -153,8 +157,10 @@ function normalizeFlickrPhotos(items) {
         title: item.title || `Foto ${item.id}`,
         date: item.datetaken || new Date().toISOString(),
         src,
+        fallbackSrc: flickrStaticImageUrl(item),
         lat,
-        lng
+        lng,
+        albumOrder: index
       };
     })
     .filter(Boolean);
@@ -164,7 +170,70 @@ function flickrImageUrl(item) {
   const directUrl = item.url_l || item.url_m || item.url_s || item.url_t || item.url_sq || item.url_o;
 
   if (directUrl) return directUrl.replace(/^http:/, "https:");
+  return flickrStaticImageUrl(item);
+}
+
+function flickrStaticImageUrl(item) {
   if (!item.server || !item.id || !item.secret) return "";
 
   return `https://live.staticflickr.com/${item.server}/${item.id}_${item.secret}_z.jpg`;
+}
+
+async function fillMissingFlickrLocations(items, apiKey) {
+  const photos = [...items];
+  const missingGeo = photos.filter((item) => !hasFlickrGeo(item));
+
+  if (!missingGeo.length || !apiKey) return photos;
+
+  const batchSize = 8;
+  for (let index = 0; index < missingGeo.length; index += batchSize) {
+    const batch = missingGeo.slice(index, index + batchSize);
+    const locations = await Promise.all(batch.map((item) => fetchFlickrPhotoLocation(item, apiKey)));
+
+    locations.forEach((location, batchIndex) => {
+      if (!location) return;
+      Object.assign(batch[batchIndex], location);
+    });
+  }
+
+  return photos;
+}
+
+function hasFlickrGeo(item) {
+  const lat = Number(item.latitude);
+  const lng = Number(item.longitude);
+  return Boolean(item.latitude && item.longitude && Number.isFinite(lat) && Number.isFinite(lng));
+}
+
+async function fetchFlickrPhotoLocation(item, apiKey) {
+  if (!item.id) return null;
+
+  const flickrUrl = new URL("https://www.flickr.com/services/rest/");
+  flickrUrl.search = new URLSearchParams({
+    method: "flickr.photos.geo.getLocation",
+    api_key: apiKey,
+    photo_id: item.id,
+    format: "json",
+    nojsoncallback: "1",
+    cache_bust: String(Date.now())
+  }).toString();
+
+  try {
+    const flickrResponse = await fetch(flickrUrl, { cache: "no-store" });
+    const payload = await flickrResponse.json();
+    const location = payload.photo?.location;
+    const lat = Number(location?.latitude);
+    const lng = Number(location?.longitude);
+
+    if (!flickrResponse.ok || payload.stat !== "ok" || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return null;
+    }
+
+    return {
+      latitude: String(lat),
+      longitude: String(lng)
+    };
+  } catch {
+    return null;
+  }
 }

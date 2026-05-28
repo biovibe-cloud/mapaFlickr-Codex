@@ -49,13 +49,14 @@ let activePhotoIndex = 0;
 let ribbonSortMode = localStorage.getItem("mapaFlickr.ribbonSortMode") || "nearby";
 const mapMarkers = new Map();
 const urlParams = new URLSearchParams(window.location.search);
-const storageKeys = {
-  albumId: "mapaFlickr.albumId",
-  apiKey: "mapaFlickr.apiKey"
-};
+const urlAlbumId = normalizeAlbumId(urlParams.get("albumId") || "");
+const urlApiKey = urlParams.get("apiKey") || "";
 
-albumInput.value = urlParams.get("albumId") || localStorage.getItem(storageKeys.albumId) || "";
-apiKeyInput.value = urlParams.get("apiKey") || localStorage.getItem(storageKeys.apiKey) || "";
+localStorage.removeItem("mapaFlickr.albumId");
+localStorage.removeItem("mapaFlickr.apiKey");
+
+albumInput.value = urlAlbumId;
+apiKeyInput.value = urlApiKey;
 
 const map = L.map(mapCanvas, {
   worldCopyJump: true,
@@ -113,7 +114,7 @@ function ribbonPhotos() {
   }
 
   if (ribbonSortMode === "name") {
-    return photosByNameNearActive(photos, activePhoto);
+    return photosByAlbumOrderFromActive(activePhoto);
   }
 
   return photos.sort((a, b) => {
@@ -156,6 +157,14 @@ function renderMarkers() {
 }
 
 function renderRibbon() {
+  if (!selectedLocation) {
+    locationName.textContent = "Sin album cargado";
+    photoCount.textContent = "Carga un album de Flickr";
+    ribbonStrip.innerHTML = "";
+    updateRibbonSortButtons();
+    return;
+  }
+
   const photos = ribbonPhotos().slice(0, 6);
 
   const selectedPhoto = allSortedPhotos(selectedLocation)[activePhotoIndex];
@@ -171,6 +180,7 @@ function renderRibbon() {
       <img src="${item.src}" alt="${item.title}" loading="lazy">
       <time datetime="${item.date}">${item.title}</time>
     `;
+    setPhotoImage(tile.querySelector("img"), item);
     tile.addEventListener("click", () => {
       selectLocation(location, photoIndex);
       openPhoto(location, photoIndex);
@@ -203,8 +213,8 @@ function openPhoto(location, photoIndex = 0) {
   const item = photos[activePhotoIndex];
   const wasAlreadyOpen = lightbox.open;
 
-  lightboxImage.src = item.src;
   lightboxImage.alt = `${item.title}, ${location.name}`;
+  setPhotoImage(lightboxImage, item);
   lightboxTitle.textContent = `${item.title} - ${location.name}`;
   lightboxDate.textContent = `${activePhotoIndex + 1}/${photos.length} | ${formatDate(item.date)}`;
   updateGalleryButtons(photos.length);
@@ -264,19 +274,51 @@ function degreesToRadians(value) {
   return (value * Math.PI) / 180;
 }
 
-function photosByNameNearActive(photos, activePhoto) {
-  const sortedByName = [...photos].sort((a, b) => a.item.title.localeCompare(b.item.title, "es", { numeric: true }));
-  const activeIndex = sortedByName.findIndex((entry) => entry.item === activePhoto);
+function photosByAlbumOrderFromActive(activePhoto) {
+  const photos = albumOrderedPhotos();
+  const activeKey = photoIdentity(activePhoto);
+  const activeIndex = photos.findIndex((entry) => photoIdentity(entry.item) === activeKey);
+  if (activeIndex === -1) return photos;
 
-  return sortedByName
-    .map((entry, index) => ({
-      ...entry,
-      nameDistance: activeIndex === -1 ? index : Math.abs(index - activeIndex)
-    }))
-    .sort((a, b) => {
-      if (a.nameDistance !== b.nameDistance) return a.nameDistance - b.nameDistance;
-      return a.item.title.localeCompare(b.item.title, "es", { numeric: true });
-    });
+  const ribbonSize = 6;
+  const photoTotal = Math.min(ribbonSize, photos.length);
+
+  return Array.from({ length: photoTotal }, (_, index) => photos[(activeIndex + index) % photos.length]);
+}
+
+function albumOrderedPhotos() {
+  let fallbackAlbumOrder = 0;
+
+  return locations
+    .flatMap((location) => {
+      const sortedLocationPhotos = allSortedPhotos(location);
+      return location.photos.map((item) => {
+        const photoIndex = sortedLocationPhotos.findIndex((photoItem) => photoIdentity(photoItem) === photoIdentity(item));
+
+        return {
+          item,
+          location,
+          photoIndex: photoIndex === -1 ? 0 : photoIndex,
+          albumOrder: item.albumOrder ?? fallbackAlbumOrder++
+        };
+      });
+    })
+    .sort((a, b) => a.albumOrder - b.albumOrder);
+}
+
+function normalizePhotoTitle(title) {
+  return String(title || "").trim();
+}
+
+function photoIdentity(item) {
+  return [
+    item.id || "",
+    normalizePhotoTitle(item.title),
+    item.date || "",
+    item.lat,
+    item.lng,
+    item.src || ""
+  ].join("|");
 }
 
 function updateGalleryButtons(photoTotal) {
@@ -349,7 +391,7 @@ flickrForm.addEventListener("submit", async (event) => {
 
 renderMarkers();
 renderRibbon();
-loadFlickrAlbum({ silent: true });
+if (urlAlbumId && urlApiKey) loadFlickrAlbum({ silent: true });
 
 function replaceLocations(nextLocations) {
   locations = nextLocations;
@@ -388,7 +430,7 @@ function ribbonStatusText(photoTotal) {
   const label = `${photoTotal} imagen${photoTotal === 1 ? "" : "es"}`;
 
   if (ribbonSortMode === "date") return `${label} con fechas cercanas a la seleccion`;
-  if (ribbonSortMode === "name") return `${label} con nombres cercanos a la seleccion`;
+  if (ribbonSortMode === "name") return `${label} desde la seleccion, segun el album`;
   return `${label} mas cercanas a la seleccion`;
 }
 
@@ -417,26 +459,42 @@ async function loadFlickrAlbum({ silent = false } = {}) {
   if (albumId) params.set("albumId", albumId);
   if (apiKey) params.set("apiKey", apiKey);
   params.set("cacheBust", String(Date.now()));
-  saveFlickrSettings(albumId, apiKey);
 
-  if (!quiet) setSourceStatus("Leyendo Flickr...");
+  clearCurrentAlbum(`Leyendo album ${albumId}...`);
 
   try {
     const payload = await fetchFlickrAlbum(params, apiKey, albumId);
 
+    if (payload.albumId && String(payload.albumId) !== String(albumId)) {
+      throw new Error(`Flickr devolvio el album ${payload.albumId}, pero se pidio ${albumId}`);
+    }
+
     if (!payload.photos?.length) {
-      setSourceStatus("El album no tiene fotos con ubicacion publica");
+      setSourceStatus(`El album ${albumId} no tiene fotos con ubicacion publica`);
       return;
     }
 
     replaceLocations(groupPhotosByPlace(payload.photos));
-    setSourceStatus(`${payload.located}/${payload.total} fotos ubicadas de ${payload.title}`);
+    setSourceStatus(`${payload.located}/${payload.total} fotos ubicadas de ${payload.title} (${albumId})`);
   } catch (error) {
     if (!quiet) setSourceStatus(error.message || "No se pudo conectar con Flickr");
   }
 }
 
+function clearCurrentAlbum(message) {
+  selectedLocation = null;
+  activePhotoIndex = 0;
+  mapMarkers.forEach((marker) => marker.remove());
+  mapMarkers.clear();
+  ribbonStrip.innerHTML = "";
+  locationName.textContent = "Cargando Flickr";
+  photoCount.textContent = message;
+  setSourceStatus(message);
+}
+
 async function fetchFlickrAlbum(params, apiKey, albumId) {
+  let serverError = null;
+
   if (window.location.protocol !== "file:") {
     try {
       const response = await fetch(`/api/flickr-album?${params.toString()}`, { cache: "no-store" });
@@ -444,31 +502,37 @@ async function fetchFlickrAlbum(params, apiKey, albumId) {
 
       if (response.ok) return payload;
       throw new Error(payload.error || "No se pudo leer Flickr");
-    } catch {
+    } catch (error) {
+      serverError = error;
       // If the local server is not running, try Flickr directly below.
     }
   }
 
-  const firstPage = await fetchFlickrPhotoPage(apiKey, albumId, 1);
-  const pages = Number(firstPage.photoset?.pages || 1);
-  const photos = [...(firstPage.photoset?.photo || [])];
+  try {
+    const firstPage = await fetchFlickrPhotoPage(apiKey, albumId, 1);
+    const pages = Number(firstPage.photoset?.pages || 1);
+    const photos = [...(firstPage.photoset?.photo || [])];
 
-  for (let page = 2; page <= pages; page += 1) {
-    setSourceStatus(`Leyendo Flickr... pagina ${page}/${pages}`);
-    const payload = await fetchFlickrPhotoPage(apiKey, albumId, page);
-    photos.push(...(payload.photoset?.photo || []));
+    for (let page = 2; page <= pages; page += 1) {
+      setSourceStatus(`Leyendo Flickr... pagina ${page}/${pages}`);
+      const payload = await fetchFlickrPhotoPage(apiKey, albumId, page);
+      photos.push(...(payload.photoset?.photo || []));
+    }
+
+    return await normalizeFlickrPayload(
+      {
+        photoset: {
+          title: firstPage.photoset?.title,
+          total: firstPage.photoset?.total,
+          photo: photos
+        }
+      },
+      albumId,
+      apiKey
+    );
+  } catch (error) {
+    throw serverError || error;
   }
-
-  return normalizeFlickrPayload(
-    {
-      photoset: {
-        title: firstPage.photoset?.title,
-        total: firstPage.photoset?.total,
-        photo: photos
-      }
-    },
-    albumId
-  );
 }
 
 async function fetchFlickrPhotoPage(apiKey, albumId, page) {
@@ -496,9 +560,13 @@ async function fetchFlickrPhotoPage(apiKey, albumId, page) {
   return payload;
 }
 
-function normalizeFlickrPayload(payload, albumId) {
-  const photos = (payload.photoset?.photo || [])
-    .map((item) => {
+async function normalizeFlickrPayload(payload, albumId, apiKey) {
+  const rawPhotos = payload.photoset?.photo || [];
+  const photosWithLocations = await fillMissingFlickrLocations(rawPhotos, apiKey, (checked, total) => {
+    setSourceStatus(`Buscando ubicaciones publicas... ${checked}/${total}`);
+  });
+  const photos = photosWithLocations
+    .map((item, index) => {
       const lat = Number(item.latitude);
       const lng = Number(item.longitude);
       const src = flickrImageUrl(item);
@@ -512,8 +580,10 @@ function normalizeFlickrPayload(payload, albumId) {
         title: item.title || `Foto ${item.id}`,
         date: item.datetaken || new Date().toISOString(),
         src,
+        fallbackSrc: flickrStaticImageUrl(item),
         lat,
-        lng
+        lng,
+        albumOrder: index
       };
     })
     .filter(Boolean);
@@ -531,18 +601,90 @@ function flickrImageUrl(item) {
   const directUrl = item.url_l || item.url_m || item.url_s || item.url_t || item.url_sq || item.url_o;
 
   if (directUrl) return directUrl.replace(/^http:/, "https:");
+  return flickrStaticImageUrl(item);
+}
+
+function flickrStaticImageUrl(item) {
   if (!item.server || !item.id || !item.secret) return "";
 
   return `https://live.staticflickr.com/${item.server}/${item.id}_${item.secret}_z.jpg`;
 }
 
-function setSourceStatus(message) {
-  sourceStatus.textContent = message;
+async function fillMissingFlickrLocations(items, apiKey, onProgress) {
+  const photos = [...items];
+  const missingGeo = photos.filter((item) => !hasFlickrGeo(item));
+
+  if (!missingGeo.length || !apiKey) return photos;
+
+  const batchSize = 8;
+  for (let index = 0; index < missingGeo.length; index += batchSize) {
+    const batch = missingGeo.slice(index, index + batchSize);
+    const locations = await Promise.all(batch.map((item) => fetchFlickrPhotoLocation(item, apiKey)));
+
+    locations.forEach((location, batchIndex) => {
+      if (!location) return;
+      Object.assign(batch[batchIndex], location);
+    });
+
+    onProgress?.(Math.min(index + batchSize, missingGeo.length), missingGeo.length);
+  }
+
+  return photos;
 }
 
-function saveFlickrSettings(albumId, apiKey) {
-  localStorage.setItem(storageKeys.albumId, albumId);
-  localStorage.setItem(storageKeys.apiKey, apiKey);
+function hasFlickrGeo(item) {
+  const lat = Number(item.latitude);
+  const lng = Number(item.longitude);
+  return Boolean(item.latitude && item.longitude && Number.isFinite(lat) && Number.isFinite(lng));
+}
+
+async function fetchFlickrPhotoLocation(item, apiKey) {
+  if (!item.id) return null;
+
+  const flickrParams = new URLSearchParams({
+    method: "flickr.photos.geo.getLocation",
+    api_key: apiKey,
+    photo_id: item.id,
+    format: "json",
+    nojsoncallback: "1",
+    cache_bust: String(Date.now())
+  });
+
+  try {
+    const response = await fetch(`https://www.flickr.com/services/rest/?${flickrParams.toString()}`, {
+      cache: "no-store"
+    });
+    const payload = await response.json();
+    const location = payload.photo?.location;
+    const lat = Number(location?.latitude);
+    const lng = Number(location?.longitude);
+
+    if (!response.ok || payload.stat !== "ok" || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return null;
+    }
+
+    return {
+      latitude: String(lat),
+      longitude: String(lng)
+    };
+  } catch {
+    return null;
+  }
+}
+
+function setPhotoImage(image, item) {
+  if (!image) return;
+
+  image.onerror = () => {
+    if (!item.fallbackSrc || image.src === item.fallbackSrc) return;
+    image.onerror = null;
+    image.src = item.fallbackSrc;
+  };
+  image.src = item.src;
+}
+
+function setSourceStatus(message) {
+  sourceStatus.textContent = message;
 }
 
 function normalizeAlbumId(value) {
