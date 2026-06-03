@@ -24,11 +24,9 @@ Si PowerShell dice que `npm` no existe, instala Node.js desde `https://nodejs.or
 
 Necesitas una API key de Flickr y el ID del album/photoset. Puedes usarlos de dos formas:
 
-### Opcion recomendada para GitHub Pages y blogs
+### Opcion recomendada para GitHub Pages
 
 Abre `index.html` o la URL publicada en GitHub Pages, pega el ID del album y la API key en los campos de la app y pulsa `Cargar album`.
-
-La app guarda esos datos en el navegador de cada usuario con `localStorage`, por lo que cada persona puede usar su propio album sin modificar el codigo.
 
 Tambien puedes compartir o incrustar una URL con parametros:
 
@@ -36,17 +34,35 @@ Tambien puedes compartir o incrustar una URL con parametros:
 https://tu-usuario.github.io/tu-repo/?albumId=TU_ALBUM_ID&apiKey=TU_API_KEY
 ```
 
-Para un blog, puedes usar un iframe:
+### Modo embebido para blogs
+
+Agrega `embed=1` a la URL para ocultar el titulo, la barra superior y los campos de texto. En ese modo el mapa ocupa todo el iframe y usa el `albumId` y la `apiKey` que vienen en la URL.
 
 ```html
 <iframe
-  src="https://tu-usuario.github.io/tu-repo/?albumId=TU_ALBUM_ID&apiKey=TU_API_KEY"
+  src="https://tu-usuario.github.io/tu-repo/?embed=1&albumId=TU_ALBUM_ID&apiKey=TU_API_KEY"
   width="100%"
   height="720"
-  style="border:0;"
+  style="border:0; display:block; width:100%;"
   loading="lazy"
+  referrerpolicy="no-referrer-when-downgrade"
 ></iframe>
 ```
+
+Ejemplo con el repositorio publicado:
+
+```html
+<iframe
+  src="https://biovibe-cloud.github.io/mapaFlickr-Codex/?embed=1&albumId=TU_ALBUM_ID&apiKey=TU_API_KEY"
+  width="100%"
+  height="720"
+  style="border:0; display:block; width:100%;"
+  loading="lazy"
+  referrerpolicy="no-referrer-when-downgrade"
+></iframe>
+```
+
+En GitHub Pages la API key no se muestra en pantalla, pero si va en la URL del iframe sigue siendo visible para quien inspeccione el codigo de la pagina. Para ocultarla realmente hace falta usar un backend con variables de entorno.
 
 ### Opcion con servidor Node.js
 

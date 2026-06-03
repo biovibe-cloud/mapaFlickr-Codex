@@ -21,8 +21,14 @@
   box-sizing: border-box;
 }
 
+html {
+  width: 100%;
+  height: 100%;
+}
+
 body {
   margin: 0;
+  padding: 0;
   min-height: 100vh;
   background:
     linear-gradient(90deg, rgba(36, 49, 45, 0.045) 1px, transparent 1px),
@@ -30,6 +36,14 @@ body {
     var(--page);
   background-size: 18px 18px;
   color: var(--ink);
+}
+
+body.is-embed {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+  background: var(--map);
 }
 
 button {
@@ -44,6 +58,14 @@ button {
   padding: 28px;
 }
 
+body.is-embed .app-shell {
+  position: absolute;
+  inset: 0;
+  display: block;
+  min-height: 0;
+  padding: 0;
+}
+
 .travel-map {
   width: min(1180px, 100%);
   min-height: min(760px, calc(100vh - 56px));
@@ -56,6 +78,16 @@ button {
   box-shadow: var(--shadow);
 }
 
+body.is-embed .travel-map {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -63,6 +95,10 @@ button {
   gap: 18px;
   padding: 22px 24px 16px;
   border-bottom: 1px solid var(--line);
+}
+
+body.is-embed .topbar {
+  display: none;
 }
 
 .brand {
@@ -148,6 +184,10 @@ h1 {
     var(--map);
 }
 
+body.is-embed .map-stage {
+  min-height: 0;
+}
+
 .map-toolbar {
   position: absolute;
   z-index: 900;
@@ -198,6 +238,12 @@ h1 {
   min-height: 420px;
   background: var(--map);
   font: inherit;
+}
+
+body.is-embed .viewport,
+body.is-embed .map-canvas,
+body.is-embed .leaflet-container {
+  min-height: 0;
 }
 
 .leaflet-tile-pane {
@@ -515,5 +561,13 @@ h1 {
   .map-toolbar {
     top: 12px;
     right: 12px;
+  }
+
+  body.is-embed .app-shell {
+    padding: 0;
+  }
+
+  body.is-embed .travel-map {
+    min-height: 0;
   }
 }

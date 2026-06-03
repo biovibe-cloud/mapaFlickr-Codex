@@ -49,8 +49,11 @@ let activePhotoIndex = 0;
 let ribbonSortMode = localStorage.getItem("mapaFlickr.ribbonSortMode") || "nearby";
 const mapMarkers = new Map();
 const urlParams = new URLSearchParams(window.location.search);
+const isEmbedMode = urlParams.get("embed") === "1";
 const urlAlbumId = normalizeAlbumId(urlParams.get("albumId") || "");
 const urlApiKey = urlParams.get("apiKey") || "";
+
+document.body.classList.toggle("is-embed", isEmbedMode);
 
 localStorage.removeItem("mapaFlickr.albumId");
 localStorage.removeItem("mapaFlickr.apiKey");
